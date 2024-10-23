@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sudoku Solver</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      #imgPreview {
+        width: 225px;
+      }
+      #solution {
+        overflow: auto;
+        max-height: 600px;
+        max-width: 100%;
+      }
+      table {
+        border: 2px solid;
+        border-collapse: collapse;
+      }
+      td {
+        border: 1px solid #ddd;
+        padding: 4px;
+        text-align: center;
+        font-size: 12px;
+        width: 25px;
+        height: 25px;
+      }
+      #imgProcLoadingMessage {
+        display: none;
+        color: #888;
+      }
+      #solutionLoadingMessage {
+        display: none;
+        color: #888;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Sudoku Solver</h1>
+    <form id="uploadImage">
+      <input type="file" id="imageInput" accept="image/*" required />
+      <img id="imgPreview" src="#" alt="Your sudoku image" />
+      <button type="submit" id="imgProcButton">Process Image</button>
+    </form>
+    <div id="imgProcLoadingMessage">Processing image, please wait...</div>
+    <h2>Detected sudoku:</h2>
+    <p>If you find any wrong inputs please edit them</p>
+    <div id="sudoku"></div>
+    <button type="submit" id="solveSudokuButton">Solve</button>
+    <div id="solutionLoadingMessage">Solving, please wait...</div>
+    <h2>Solution:</h2>
+    <div id="errorMessage"></div>
+    <div id="solution"></div>
+
+    <script>
+      function createSudokuTable(matrix, editable = false) {
+        const table = document.createElement("table");
+        for (let i = 0; i < matrix.length; i++) {
+          const tr = document.createElement("tr");
+          if (i % 3 == 2) {
+            tr.style.borderBottom = "2px solid";
+          }
+          for (let j = 0; j < matrix[i].length; j++) {
+            const td = document.createElement("td");
+            const value = matrix[i][j];
+
+            if (Number(value) != 0) {
+              td.textContent = matrix[i][j];
+            }
+            if (editable) {
+              td.contentEditable = "true";
+              td.className = "cell";
+            }
+            if (j % 3 == 2) {
+              td.style.borderRight = "2px solid";
+            }
+            tr.appendChild(td);
+          }
+          table.appendChild(tr);
+        }
+        return table;
+      }
+
+      function parseSudoku(cells) {
+        sudoku = [];
+
+        for (let i = 0; i < 9; i++) {
+          row = [];
+          for (let j = 0; j < 9; j++) {
+            row.push(Number(cells[i * 9 + j].textContent));
+          }
+          sudoku.push(row);
+        }
+        return sudoku;
+      }
+
+      document.getElementById("imageInput").addEventListener("change", (e) => {
+        const img = e.target.files[0];
+        const imgTag = document.getElementById("imgPreview");
+        if (window.FileReader) {
+          const reader = new FileReader();
+          reader.onload = function () {
+            imgTag.src = reader.result;
+          };
+          reader.readAsDataURL(img);
+        } else {
+          alert("Image preview not supported");
+        }
+      });
+
+      document
+        .getElementById("uploadImage")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const formData = new FormData();
+          const imageFile = document.getElementById("imageInput").files[0];
+          formData.append("image", imageFile);
+
+          const imgProcLoadingMessage = document.getElementById(
+            "imgProcLoadingMessage"
+          );
+          const solutionDiv = document.getElementById("sudoku");
+          const imgProcButton = document.getElementById("imgProcButton");
+
+          try {
+            imgProcLoadingMessage.style.display = "block";
+            imgProcButton.disabled = true;
+            solutionDiv.innerHTML = "";
+
+            const response = await axios.post(
+              "http://127.0.0.1:5000/upload",
+              formData,
+              {
+                headers: {
+                  "Content-Type": "multipart/form-data",
+                },
+              }
+            );
+
+            const numericGrid = createSudokuTable(response.data.result, true);
+            solutionDiv.appendChild(numericGrid);
+          } catch (error) {
+            console.error("Error:", error);
+            solutionDiv.textContent =
+              "Error processing image: " + error.message;
+          } finally {
+            imgProcLoadingMessage.style.display = "none";
+            imgProcButton.disabled = false;
+          }
+        });
+
+      document
+        .getElementById("solveSudokuButton")
+        .addEventListener("click", async (e) => {
+          e.preventDefault();
+
+          const sudokuCells = document.getElementsByClassName("cell");
+          const errorMessage = document.getElementById("errorMessage");
+          const solutionDiv = document.getElementById("solution");
+          const solutionLoadingMessage = document.getElementById(
+            "solutionLoadingMessage"
+          );
+
+          try {
+            const sudoku = parseSudoku(sudokuCells);
+            solutionLoadingMessage.style.display = "block";
+            e.target.disabled = true;
+
+            const response = await axios.post("http://127.0.0.1:5000/solve", {
+              sudoku: sudoku,
+            });
+
+            const solution = response.data.result;
+            const sudokuTable = createSudokuTable(solution);
+
+            solutionDiv.innerHTML = "";
+            solutionDiv.appendChild(sudokuTable);
+            errorMessage.textContent = "";
+          } catch (error) {
+            console.error("Error:", error);
+            errorMessage.textContent =
+              "Error processing matrix: " + error.message;
+            solutionDiv.innerHTML = "";
+          } finally {
+            solutionLoadingMessage.style.display = "none";
+            e.target.disabled = false;
+          }
+        });
+    </script>
+  </body>
+</html>
